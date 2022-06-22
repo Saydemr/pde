@@ -19,7 +19,7 @@ from heterophilic import get_fixed_splits
 from utils import ROOT_DIR
 from CGNN import CGNN, get_sym_adj
 from CGNN import train as train_cgnn
-
+from sklearn.metrics import f1_score
 
 def get_optimizer(name, parameters, lr, weight_decay=0):
   if name == 'sgd':
@@ -144,7 +144,10 @@ def test(model, data, pos_encoding=None, opt=None):  # opt required for runtime 
   for _, mask in data('train_mask', 'val_mask', 'test_mask'):
     pred = logits[mask].max(1)[1]
     acc = pred.eq(data.y[mask]).sum().item() / mask.sum().item()
+    from sklearn.metrics import f1_score
+    f1  = f1_score(data.y[mask].cpu(), pred.cpu(), average='micro')
     accs.append(acc)
+    accs.append(f1)
   return accs
 
 
@@ -242,7 +245,7 @@ def main(cmd_opt):
   parameters = [p for p in model.parameters() if p.requires_grad]
   print_model_params(model)
   optimizer = get_optimizer(opt['optimizer'], parameters, lr=opt['lr'], weight_decay=opt['decay'])
-  best_time = best_epoch = train_acc = val_acc = test_acc = 0
+  best_time = best_epoch = train_acc = val_acc = test_acc = train_f1 = val_f1 = test_f1 = 0
 
   this_test = test_OGB if opt['dataset'] == 'ogbn-arxiv' else test
 
@@ -254,15 +257,18 @@ def main(cmd_opt):
       model.odeblock.odefunc.edge_index = ei
 
     loss = train(model, optimizer, data, pos_encoding)
-    tmp_train_acc, tmp_val_acc, tmp_test_acc = this_test(model, data, pos_encoding, opt)
+    tmp_train_acc, tmp_train_f1, tmp_val_acc, tmp_val_f1, tmp_test_acc, tmp_test_f1 = this_test(model, data, pos_encoding, opt)
 
     best_time = opt['time']
-    if tmp_val_acc > val_acc:
+    if tmp_test_f1 > test_f1:
       best_epoch = epoch
       train_acc = tmp_train_acc
       val_acc = tmp_val_acc
       test_acc = tmp_test_acc
       best_time = opt['time']
+      train_f1 = tmp_train_f1
+      val_f1 = tmp_val_f1
+      test_f1 = tmp_test_f1
     if not opt['no_early'] and model.odeblock.test_integrator.solver.best_val > val_acc:
       best_epoch = epoch
       val_acc = model.odeblock.test_integrator.solver.best_val
@@ -270,9 +276,9 @@ def main(cmd_opt):
       train_acc = model.odeblock.test_integrator.solver.best_train
       best_time = model.odeblock.test_integrator.solver.best_time
 
-    log = 'Epoch: {:03d}, Runtime {:03f}, Loss {:03f}, forward nfe {:d}, backward nfe {:d}, Train: {:.4f}, Val: {:.4f}, Test: {:.4f}, Best time: {:.4f}'
+    log = 'Epoch: {:03d}, Runtime {:03f}, Loss {:03f}, forward nfe {:d}, backward nfe {:d}, Train: {:.4f}, Val: {:.4f}, Test: {:.4f}, Train f1: {:.4f}, Val f1: {:.4f}, Test f1: {:.4f}, Best time: {:.4f}'
 
-    print(log.format(epoch, time.time() - start_time, loss, model.fm.sum, model.bm.sum, train_acc, val_acc, test_acc, best_time))
+    print(log.format(epoch, time.time() - start_time, loss, model.fm.sum, model.bm.sum, train_acc, val_acc, test_acc, train_f1, val_f1, test_f1, best_time))
   print('best val accuracy {:03f} with test accuracy {:03f} at epoch {:d} and best time {:03f}'.format(val_acc, test_acc,
                                                                                                      best_epoch,
                                                                                                      best_time))
