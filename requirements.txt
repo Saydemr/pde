@@ -6,7 +6,7 @@ jupyter==1.0.0
 matplotlib==3.2.2
 networkx==2.4
 numba==0.51.2
-numpy==1.19.3
+numpy==1.22.0
 ogb==1.2.4
 pandas==1.0.5
 pip==20.1.1
