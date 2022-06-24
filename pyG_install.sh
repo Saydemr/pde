@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-TORCH=1.8.2
-CUDA=cu102  # Supply as command line cpu or cu102
+TORCH=1.11.0
+CUDA=cu113  # Supply as command line cpu or cu102
 
 pip install ogb pykeops -U --no-cache-dir
 pip install torch==1.8.1 -U --no-cache-dir
