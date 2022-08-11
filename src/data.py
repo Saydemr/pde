@@ -94,11 +94,11 @@ def get_dataset(opt: dict, data_dir, use_lcc: bool = False) -> InMemoryDataset:
     train_mask_exists = True
 
   #todo this currently breaks with heterophilic datasets if you don't pass --geom_gcn_splits
-  if (use_lcc or not train_mask_exists) and not opt['geom_gcn_splits']:
+  if (use_lcc or not train_mask_exists):
     dataset.data = set_train_val_test_split(
       12345,
       dataset.data,
-      num_development=5000 if ds == "CoauthorCS" else 1500)
+      num_development=6570)
 
   return dataset
 
@@ -148,7 +148,7 @@ def set_train_val_test_split(
         seed: int,
         data: Data,
         num_development: int = 1500,
-        num_per_class: int = 20) -> Data:
+        num_per_class: int = 850) -> Data:
   rnd_state = np.random.RandomState(seed)
   num_nodes = data.y.shape[0]
   development_idx = rnd_state.choice(num_nodes, num_development, replace=False)

@@ -24,7 +24,7 @@ def main(opt):
                      context_size=opt['context_size'], walks_per_node=opt['walks_per_node'],
                      num_negative_samples=opt['neg_pos_ratio'], p=1, q=1, sparse=True).to(device)
 
-    loader = model.loader(batch_size=128, shuffle=True, num_workers=4)
+    loader = model.loader(batch_size=64, shuffle=True, num_workers=10)
     optimizer = torch.optim.SparseAdam(list(model.parameters()), lr=0.01)
 
     def train():
@@ -69,7 +69,7 @@ def main(opt):
 
     print(f"[i] Storing embeddings in {fname}")
     
-    with open(osp.join("../data/pos_encodings", fname), 'wb') as f:
+    with open(osp.join("../data/pos_encodings", fname), 'wb+') as f:
       # make sure the pickle is not bound to any gpu, and store test acc with data
       pickle.dump({"data": z.data.to(torch.device("cpu")), "acc": acc}, f)
 
@@ -88,7 +88,7 @@ if __name__ == "__main__":
                         help='Context size')
   parser.add_argument('--walks_per_node', type=int, default=16, # best paper results with 18
                         help='Walks per node')
-  parser.add_argument('--neg_pos_ratio', type=int, default=1, 
+  parser.add_argument('--neg_pos_ratio', type=int, default=4, 
                         help='Number of negatives for each positive')
   parser.add_argument('--epochs', type=int, default=100, 
                         help='Number of epochs')
