@@ -241,7 +241,7 @@ def load_data(opt):
                                              root='../data/PyG'+exdataset+'Test/', processed_file_name='PyG'+exdataset+'Test.pt')
   return Graph_GNN, Graph_train, Graph_test
 
-# from SuperPixData import load_matlab_file, stack_matrices
+from SuperPixData import load_matlab_file, stack_matrices
 def create_Superpix75(opt, type, root, processed_file_name=None):
     class IMAGE_IN_MEM(InMemoryDataset):
         def __init__(self, root, transform=None, pre_transform=None, pre_filter=None):
@@ -334,9 +334,9 @@ def load_Superpix75Mat(opt): #, path='../data/SuperMNIST/MNIST/datasets/mnist_su
     # 'path_test_centroids' : os.path.join(path_main, 'datasets/mnist_superpixels_data_%d/test_centroids.mat' % n_supPix)}}
 
     print("creating in_memory_datasets")
-    # type = "GNN"
-    # Graph_GNN = create_Superpix75(opt, type,
-    #             root='../data/SuperPix75'+'_'+type+'/', processed_file_name='GraphSuperPix75'+type+'.pt')
+    type = "GNN"
+    Graph_GNN = create_Superpix75(opt, type,
+                 root='../data/SuperPix75'+'_'+type+'/', processed_file_name='GraphSuperPix75'+type+'.pt')
     type = "Train"
     Graph_train = create_Superpix75(opt, type,
                 root='../data/SuperPix75'+ str(opt['train_size']) +type+'/', processed_file_name='GraphSuperPix75'+ str(opt['train_size'])+type+'.pt')
@@ -419,61 +419,61 @@ if __name__ == "__main__":
     opt = vars(args)
     opt = get_image_opt(opt)
 
-    # load_Superpix75Mat(opt)
+    load_Superpix75Mat(opt)
 
 
-    # Cora = get_dataset('Cora', '../data', False)
-    # gnn = GNN(self.opt, dataset, device=self.device)
-    # odeblock = gnn.odeblock
-    # func = odeblock.odefunc
+    Cora = get_dataset('Cora', '../data', False)
+    gnn = GNN(self.opt, dataset, device=self.device)
+    odeblock = gnn.odeblock
+    func = odeblock.odefunc
 
-    # img_size = 32#28
-    # im_width = img_size
-    # im_height = img_size
-    # im_chan = 3 #1
-    # exdataset = 'CIFAR' #'MNIST'
+    img_size = 32#28
+    im_width = img_size
+    im_height = img_size
+    im_chan = 3 #1
+    exdataset = 'CIFAR' #'MNIST'
 
-    # train_loader = torch.utils.data.DataLoader(
-    #   torchvision.datasets.MNIST('data/' + exdataset + '/', train=True, download=True,
-    #                              transform=torchvision.transforms.Compose([
-    #                                torchvision.transforms.ToTensor(),
-    #                                torchvision.transforms.Normalize(
-    #                                  (0.1307,), (0.3081,))
-    #                              ])),
-    #                                 batch_size=1, shuffle=True)
+    train_loader = torch.utils.data.DataLoader(
+      torchvision.datasets.MNIST('data/' + exdataset + '/', train=True, download=True,
+                                 transform=torchvision.transforms.Compose([
+                                   torchvision.transforms.ToTensor(),
+                                   torchvision.transforms.Normalize(
+                                     (0.1307,), (0.3081,))
+                                 ])),
+                                    batch_size=1, shuffle=True)
 
-    # transform = transforms.Compose(
-    #     [transforms.ToTensor(),
-    #      transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    #
-    # train_loader = torch.utils.data.DataLoader(
-    #   torchvision.datasets.CIFAR10('data/' + exdataset + '/', train=True, download=True,
-    #                              transform=transform),
-    #                                 batch_size=1, shuffle=True)
-    #
-    #
-    # edge_index = edge_index_calc(im_height, im_width)
-    #
-    # opt = get_image_opt({})
-    # Graph = create_in_memory_dataset(opt, "Train", train_loader, edge_index, im_height, im_width, im_chan,
-    #                                                                         root='./data/Graph' + exdataset + 'GNN/',
-    #                                                                         processed_file_name='Graph' + exdataset + 'GNN2.pt')
-    #
-    # fig = plt.figure(figsize=(32,62))
-    # # for i in range(6):
-    # #     plt.subplot(2, 3, i + 1)
-    #
-    # for i in range(20):
-    #     plt.subplot(5, 4, i + 1)
-    #     plt.tight_layout()
-    #     digit = Graph[i]
-    #     plt.title("Ground Truth: {}".format(digit.y.item()))
-    #     plt.xticks([])
-    #     plt.yticks([])
-    #     A = digit.x#.view(im_height, im_width, im_chan)
-    #     A = A.numpy()
-    #     A = np.reshape(A, (im_height, im_width, im_chan), order='F')
-    #     A = A / 2 + 0.5  # unnormalize
-    #     plt.imshow(np.transpose(A, (1, 0, 2)))
-    # # plt.show()
-    # plt.savefig("GraphImages.png", format="PNG")
+    transform = transforms.Compose(
+        [transforms.ToTensor(),
+         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    
+    train_loader = torch.utils.data.DataLoader(
+      torchvision.datasets.CIFAR10('data/' + exdataset + '/', train=True, download=True,
+                                 transform=transform),
+                                    batch_size=1, shuffle=True)
+    
+    
+    edge_index = edge_index_calc(im_height, im_width)
+    
+    opt = get_image_opt({})
+    Graph = create_in_memory_dataset(opt, "Train", train_loader, edge_index, im_height, im_width, im_chan,
+                                                                            root='./data/Graph' + exdataset + 'GNN/',
+                                                                            processed_file_name='Graph' + exdataset + 'GNN2.pt')
+    
+    fig = plt.figure(figsize=(32,62))
+    # for i in range(6):
+    #     plt.subplot(2, 3, i + 1)
+    
+    for i in range(20):
+        plt.subplot(5, 4, i + 1)
+        plt.tight_layout()
+        digit = Graph[i]
+        plt.title("Ground Truth: {}".format(digit.y.item()))
+        plt.xticks([])
+        plt.yticks([])
+        A = digit.x#.view(im_height, im_width, im_chan)
+        A = A.numpy()
+        A = np.reshape(A, (im_height, im_width, im_chan), order='F')
+        A = A / 2 + 0.5  # unnormalize
+        plt.imshow(np.transpose(A, (1, 0, 2)))
+    # plt.show()
+    plt.savefig("GraphImages.png", format="PNG")

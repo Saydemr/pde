@@ -142,23 +142,19 @@ def test(model, data, pos_encoding=None, opt=None):  # opt required for runtime 
   feat = data.x
   if model.opt['use_labels']:
     feat = add_labels(feat, data.y, data.train_mask, model.num_classes, model.device)
-  logits, accs = model(feat, pos_encoding), []
-  for _, mask in data('test_mask'):
+  logits, scores = model(feat, pos_encoding), []
+  for _, mask in data('train_mask','val_mask', 'test_mask'):
     pred = logits[mask].max(1)[1]
     acc = pred.eq(data.y[mask]).sum().item() / mask.sum().item()
     actcpu = data.y[mask].cpu()
     predcpu = pred.cpu()
-    f1     = f1_score(actcpu, predcpu)
-    roc    = roc_auc_score(actcpu, predcpu)
-    prec   = precision_score(actcpu, predcpu)
-    recall = recall_score(actcpu, predcpu)
+    f1     = f1_score(actcpu, predcpu, average='macro')
+    roc    = roc_auc_score(actcpu, predcpu, average='macro')
+    prec   = precision_score(actcpu, predcpu, average='macro')
+    recall = recall_score(actcpu, predcpu, average='macro')
 
-    accs.append(acc)
-    accs.append(f1)
-    accs.append(roc)
-    accs.append(prec)
-    accs.append(recall)
-  return accs
+    scores.append([acc,f1,roc,prec,recall])
+  return scores
 
 
 def print_model_params(model):
@@ -255,7 +251,11 @@ def main(cmd_opt):
   parameters = [p for p in model.parameters() if p.requires_grad]
   print_model_params(model)
   optimizer = get_optimizer(opt['optimizer'], parameters, lr=opt['lr'], weight_decay=opt['decay'])
-  best_time = best_epoch = acc = f1 = roc_auc = precision = recall  = 0
+  best_time = best_epoch = 0 
+  test_acc = test_f1 = test_roc_auc = test_precision = test_recall  = 0
+  val_acc = val_f1 = val_roc_auc = val_precision = val_recall = 0
+  train_acc = train_f1 = train_roc_auc = train_precision = train_recall = 0
+
 
   this_test = test_OGB if opt['dataset'] == 'ogbn-arxiv' else test
 
@@ -267,32 +267,73 @@ def main(cmd_opt):
       model.odeblock.odefunc.edge_index = ei
 
     loss = train(model, optimizer, data, pos_encoding)
-    tmp_acc, tmp_f1, tmp_roc_auc, tmp_precision, tmp_recall = this_test(model, data, pos_encoding, opt)
+    train_scores, val_scores, test_scores = this_test(model, data, pos_encoding, opt)
+
+    tmp_train_acc, tmp_val_acc, tmp_test_acc = train_scores[0], val_scores[0], test_scores[0]
+    tmp_train_f1, tmp_val_f1, tmp_test_f1    = train_scores[1], val_scores[1], test_scores[1]
+    tmp_train_roc, tmp_val_roc, tmp_test_roc = train_scores[2], val_scores[2], test_scores[2]
+    tmp_train_prec, tmp_val_prec, tmp_test_prec = train_scores[3], val_scores[3], test_scores[3]
+    tmp_train_recall, tmp_val_recall, tmp_test_recall = train_scores[4], val_scores[4], test_scores[4]
 
     best_time = opt['time']
-    if tmp_f1 > f1:
+    if tmp_val_f1 > val_f1:
       best_epoch = epoch
-      acc = tmp_acc
-      f1 = tmp_f1
-      roc_auc = tmp_roc_auc
+      train_acc = tmp_train_acc
+      val_acc = tmp_val_acc
+      test_acc = tmp_test_acc
+      train_f1 = tmp_train_f1
+      val_f1 = tmp_val_f1
+      test_f1 = tmp_test_f1
+      train_roc_auc = tmp_train_roc
+      val_roc_auc = tmp_val_roc
+      test_roc_auc = tmp_test_roc
+      train_precision = tmp_train_prec
+      val_precision = tmp_val_prec
+      test_precision = tmp_test_prec
+      train_recall = tmp_train_recall
+      val_recall = tmp_val_recall
+      test_recall = tmp_test_recall
       best_time = opt['time']
-      precision = tmp_precision
-      recall = tmp_recall
       
-    if not opt['no_early'] and model.odeblock.test_integrator.solver.best_val > acc:
+    if not opt['no_early'] and model.odeblock.test_integrator.solver.best_val_f1 > val_f1:
       best_epoch = epoch
-      acc = model.odeblock.test_integrator.solver.best_val
-      f1 = model.odeblock.test_integrator.solver.best_test
-      precision = model.odeblock.test_integrator.solver.best_train
+
+      test_acc = model.odeblock.test_integrator.solver.best_test
+      test_f1 = model.odeblock.test_integrator.solver.best_test_f1
+      test_roc_auc = model.odeblock.test_integrator.solver.best_test_auc
+      test_precision = model.odeblock.test_integrator.solver.best_test_precision
+      test_recall = model.odeblock.test_integrator.solver.best_test_recall
+
+      train_acc = model.odeblock.test_integrator.solver.best_train
+      train_f1 = model.odeblock.test_integrator.solver.best_train_f1
+      train_roc_auc = model.odeblock.test_integrator.solver.best_train_auc
+      train_precision = model.odeblock.test_integrator.solver.best_train_precision
+      train_recall = model.odeblock.test_integrator.solver.best_train_recall
+
+      val_acc = model.odeblock.test_integrator.solver.best_val
+      val_f1 = model.odeblock.test_integrator.solver.best_val_f1
+      val_roc_auc = model.odeblock.test_integrator.solver.best_val_auc
+      val_precision = model.odeblock.test_integrator.solver.best_val_precision
+      val_recall = model.odeblock.test_integrator.solver.best_val_recall
+      
       best_time = model.odeblock.test_integrator.solver.best_time
 
     log = 'Epoch: {:03d}, Runtime {:03f}, Loss {:03f}, forward nfe {:d}, backward nfe {:d}, Acc: {:.4f}, F1: {:.4f}, ROC: {:.4f}, Precision: {:.4f}, Recall: {:.4f}, Best time: {:.4f}'
 
-    print(log.format(epoch, time.time() - start_time, loss, model.fm.sum, model.bm.sum, acc, f1, roc_auc, precision, recall, best_time))
-  print('best test f1 {:03f} with test accuracy {:03f} at epoch {:d} and best time {:03f}'.format(f1, acc,
+    print(log.format(epoch, time.time() - start_time, loss, model.fm.sum, model.bm.sum, test_acc, test_f1, test_roc_auc, test_precision, test_recall, best_time))
+  
+  
+  print('best train f1 {:03f} with accuracy {:03f} at epoch {:d} and best time {:03f}'.format(train_f1, train_acc,
                                                                                                      best_epoch,
                                                                                                      best_time))
-  return acc, acc, acc
+  print('best val f1 {:03f} with accuracy {:03f} at epoch {:d} and best time {:03f}'.format(val_f1, val_acc,
+                                                                                                     best_epoch,
+                                                                                                     best_time))
+
+  print('best test f1 {:03f} with accuracy {:03f} at epoch {:d} and best time {:03f}'.format(test_f1, test_acc,
+                                                                                                     best_epoch,
+                                                                                                     best_time))
+
 
 
 if __name__ == '__main__':

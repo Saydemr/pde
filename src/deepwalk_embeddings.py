@@ -88,7 +88,7 @@ if __name__ == "__main__":
                         help='Context size')
   parser.add_argument('--walks_per_node', type=int, default=16, # best paper results with 18
                         help='Walks per node')
-  parser.add_argument('--neg_pos_ratio', type=int, default=4, 
+  parser.add_argument('--neg_pos_ratio', type=int, default=7, 
                         help='Number of negatives for each positive')
   parser.add_argument('--epochs', type=int, default=100, 
                         help='Number of epochs')

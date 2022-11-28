@@ -41,6 +41,14 @@ class EarlyStopDopri5(RKAdaptiveStepsizeODESolver):
     self.data = None
     self.best_val = 0
     self.best_test = 0
+    self.best_test_f1 = 0
+    self.best_val_f1 = 0
+    self.best_test_roc_auc = 0
+    self.best_val_roc_auc = 0
+    self.best_test_precision = 0
+    self.best_val_precision = 0
+    self.best_test_recall = 0
+    self.best_val_recall = 0
     self.max_test_steps = opt['max_test_steps']
     self.best_time = 0
     self.ode_test = self.test_OGB if opt['dataset'] == 'ogbn-arxiv' else self.test
@@ -54,6 +62,26 @@ class EarlyStopDopri5(RKAdaptiveStepsizeODESolver):
     self.best_val = val
     self.best_test = test
     self.best_time = time.item()
+
+  def set_f1s(self, train, val, test):
+    self.best_train_f1 = train
+    self.best_val_f1 = val
+    self.best_test_f1 = test
+
+  def set_aucs(self, train, val, test):
+    self.best_train_auc = train
+    self.best_val_auc = val
+    self.best_test_auc = test
+      
+  def set_precs(self, train, val, test):
+    self.best_train_precision = train
+    self.best_val_precision = val
+    self.best_test_precision = test
+
+  def set_recalls(self, train, val, test):
+    self.best_train_recall = train
+    self.best_val_recall = val
+    self.best_test_recall = test
 
   def integrate(self, t):
     solution = torch.empty(len(t), *self.y0.shape, dtype=self.y0.dtype, device=self.y0.device)
@@ -76,9 +104,13 @@ class EarlyStopDopri5(RKAdaptiveStepsizeODESolver):
     while next_t > self.rk_state.t1 and n_steps < self.max_test_steps:
       self.rk_state = self._adaptive_step(self.rk_state)
       n_steps += 1
-      train_acc, val_acc, test_acc = self.evaluate(self.rk_state)
-      if val_acc > self.best_val:
+      train_acc, val_acc, test_acc, train_f1, val_f1, test_f1, train_roc_auc, val_roc_auc, test_roc_auc, train_precision, val_precision, test_precision, train_recall, val_recall, test_recall = self.evaluate(self.rk_state)
+      if val_f1 > self.best_val_f1:
+        self.set_f1s(train_f1, val_f1, test_f1)
         self.set_accs(train_acc, val_acc, test_acc, self.rk_state.t1)
+        self.set_aucs(train_roc_auc, val_roc_auc, test_roc_auc)
+        self.set_precs(train_precision, val_precision, test_precision)
+        self.set_recalls(train_recall, val_recall, test_recall)
     new_t = next_t
     if n_steps < self.max_test_steps:
       return (new_t, _interp_evaluate(self.rk_state.interp_coeff, self.rk_state.t0, self.rk_state.t1, next_t))
@@ -88,11 +120,28 @@ class EarlyStopDopri5(RKAdaptiveStepsizeODESolver):
   @torch.no_grad()
   def test(self, logits):
     accs = []
+    f1s = []
+    precs = []
+    recalls = []
+    aucs = []
     for _, mask in self.data('train_mask', 'val_mask', 'test_mask'):
       pred = logits[mask].max(1)[1]
       acc = pred.eq(self.data.y[mask]).sum().item() / mask.sum().item()
+
+      from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
+      actcpu = self.data.y[mask].cpu()
+      predcpu = pred.cpu()
+      f1     = f1_score(actcpu, predcpu)
+      roc    = roc_auc_score(actcpu, predcpu)
+      prec   = precision_score(actcpu, predcpu)
+      recall = recall_score(actcpu, predcpu)
+
       accs.append(acc)
-    return accs
+      f1s.append(f1)
+      aucs.append(roc)
+      precs.append(prec)
+      recalls.append(recall)
+    return accs, f1s, aucs, precs, recalls
 
   @torch.no_grad()
   def test_OGB(self, logits):
@@ -116,10 +165,10 @@ class EarlyStopDopri5(RKAdaptiveStepsizeODESolver):
       loss = self.lf(z[self.data.train_mask], self.data.y.squeeze()[self.data.train_mask])
     else:
       loss = self.lf(z[self.data.train_mask], self.data.y[self.data.train_mask])
-    train_acc, val_acc, test_acc = self.ode_test(z)
+    [train_acc, val_acc, test_acc], [train_f1, val_f1, test_f1], [train_roc_auc, val_roc_auc, test_roc_auc], [train_precision, val_precision, test_precision], [train_recall, val_recall, test_recall] = self.ode_test(z)
     log = 'ODE eval t0 {:.3f}, t1 {:.3f} Loss: {:.4f}, Train: {:.4f}, Val: {:.4f}, Test: {:.4f}'
     # print(log.format(t0, t1, loss, train_acc, val_acc, tmp_test_acc))
-    return train_acc, val_acc, test_acc
+    return train_acc, val_acc, test_acc, train_f1, val_f1, test_f1, train_roc_auc, val_roc_auc, test_roc_auc, train_precision, val_precision, test_precision, train_recall, val_recall, test_recall
 
   def set_m2(self, m2):
     self.m2 = copy.deepcopy(m2)

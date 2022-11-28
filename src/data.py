@@ -147,8 +147,48 @@ def remap_edges(edges: list, mapper: dict) -> list:
 def set_train_val_test_split(
         seed: int,
         data: Data,
-        num_development: int = 1500,
-        num_per_class: int = 850) -> Data:
+        num_development: int = 1000,
+        num_per_class: int = 20) -> Data:
+  
+
+  # rnd_state       = np.random.RandomState(seed)
+  # num_nodes       = data.y.shape[0]
+  # development_idx = rnd_state.choice(num_nodes, num_development, replace=False)
+
+
+  # test_idx    = [i for i in np.arange(num_nodes) if i not in development_idx]
+  # test_data   = data.x[test_idx]
+  # test_labels = data.y[test_idx]
+
+
+  # val_idx = np.random.choice(development_idx, len(test_idx), replace=False)
+  # val_data = data.x[val_idx]
+  # val_labels = data.y[val_idx]
+
+
+  # train_idx = [i for i in np.arange(num_nodes) if i not in test_idx and i not in val_idx]
+  # train_data = data.x[train_idx]
+  # train_labels = data.y[train_idx]
+
+
+  # from imblearn.over_sampling import RandomOverSampler
+  # ros = RandomOverSampler(random_state=rnd_state, sampling_strategy='minority')
+  # train_data, train_labels = ros.fit_resample(train_data, train_labels)
+  # train_data   = torch.from_numpy(train_data)
+  # train_labels = torch.from_numpy(train_labels)
+
+
+  # data.x = torch.cat((train_data, val_data, test_data), dim=0)
+  # data.y = torch.cat((train_labels, val_labels, test_labels), dim=0)
+
+
+  # train_idx = np.arange(train_data.shape[0])
+  # val_idx = np.arange(train_data.shape[0], train_data.shape[0] + val_data.shape[0])
+  # test_idx = np.arange(train_data.shape[0] + val_data.shape[0], train_data.shape[0] + val_data.shape[0] + test_data.shape[0])
+  # num_nodes = data.y.shape[0]
+
+
+  
   rnd_state = np.random.RandomState(seed)
   num_nodes = data.y.shape[0]
   development_idx = rnd_state.choice(num_nodes, num_development, replace=False)
@@ -161,6 +201,7 @@ def set_train_val_test_split(
     train_idx.extend(rnd_state.choice(class_idx, num_per_class, replace=False))
 
   val_idx = [i for i in development_idx if i not in train_idx]
+  val_idx = np.random.choice(val_idx, min(num_per_class, 200), replace=False)
 
   def get_mask(idx):
     mask = torch.zeros(num_nodes, dtype=torch.bool)
