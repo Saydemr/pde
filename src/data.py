@@ -7,6 +7,7 @@ import os
 import numpy as np
 
 import torch
+from eppugnn import Eppugnn
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.datasets import Planetoid, Amazon, Coauthor
 from graph_rewiring import get_two_hop, apply_gdc
@@ -34,7 +35,9 @@ def rewire(data, opt, data_dir):
 def get_dataset(opt: dict, data_dir, use_lcc: bool = False) -> InMemoryDataset:
   ds = opt['dataset']
   path = os.path.join(data_dir, ds)
-  if ds in ['Cora', 'Citeseer', 'Pubmed']:
+  if ds in ['dm', 'mm', 'hs', 'sc']:
+    dataset = Eppugnn(path, ds, transform=T.NormalizeFeatures())
+  elif ds in ['Cora', 'Citeseer', 'Pubmed']:
     dataset = Planetoid(path, ds)
   elif ds in ['Computers', 'Photo']:
     dataset = Amazon(path, ds)
@@ -53,25 +56,6 @@ def get_dataset(opt: dict, data_dir, use_lcc: bool = False) -> InMemoryDataset:
   else:
     raise Exception('Unknown dataset.')
 
-  if use_lcc:
-    lcc = get_largest_connected_component(dataset)
-
-    x_new = dataset.data.x[lcc]
-    y_new = dataset.data.y[lcc]
-
-    row, col = dataset.data.edge_index.numpy()
-    edges = [[i, j] for i, j in zip(row, col) if i in lcc and j in lcc]
-    edges = remap_edges(edges, get_node_mapper(lcc))
-
-    data = Data(
-      x=x_new,
-      edge_index=torch.LongTensor(edges),
-      y=y_new,
-      train_mask=torch.zeros(y_new.size()[0], dtype=torch.bool),
-      test_mask=torch.zeros(y_new.size()[0], dtype=torch.bool),
-      val_mask=torch.zeros(y_new.size()[0], dtype=torch.bool)
-    )
-    dataset.data = data
   if opt['rewiring'] is not None:
     dataset.data = rewire(dataset.data, opt, data_dir)
   train_mask_exists = True
@@ -80,25 +64,8 @@ def get_dataset(opt: dict, data_dir, use_lcc: bool = False) -> InMemoryDataset:
   except AttributeError:
     train_mask_exists = False
 
-  if ds == 'ogbn-arxiv':
-    split_idx = dataset.get_idx_split()
-    ei = to_undirected(dataset.data.edge_index)
-    data = Data(
-    x=dataset.data.x,
-    edge_index=ei,
-    y=dataset.data.y,
-    train_mask=split_idx['train'],
-    test_mask=split_idx['test'],
-    val_mask=split_idx['valid'])
-    dataset.data = data
-    train_mask_exists = True
-
-  #todo this currently breaks with heterophilic datasets if you don't pass --geom_gcn_splits
-  if (use_lcc or not train_mask_exists):
-    dataset.data = set_train_val_test_split(
-      12345,
-      dataset.data,
-      num_development=6570)
+  # dim reduction & oversampling
+  dataset.data = transform(12345, dataset.data)
 
   return dataset
 
@@ -144,72 +111,56 @@ def remap_edges(edges: list, mapper: dict) -> list:
   return [row, col]
 
 
-def set_train_val_test_split(
+def transform(
         seed: int,
-        data: Data,
-        num_development: int = 1000,
-        num_per_class: int = 20) -> Data:
+        data: Data) -> Data:
   
+  # reduce dimensionality of node features with PCA
+  from sklearn.decomposition import PCA
+  pca = PCA(n_components=64)
+  data.x = torch.from_numpy(pca.fit_transform(data.x.numpy()))
 
-  # rnd_state       = np.random.RandomState(seed)
-  # num_nodes       = data.y.shape[0]
-  # development_idx = rnd_state.choice(num_nodes, num_development, replace=False)
-
-
-  # test_idx    = [i for i in np.arange(num_nodes) if i not in development_idx]
-  # test_data   = data.x[test_idx]
-  # test_labels = data.y[test_idx]
-
-
-  # val_idx = np.random.choice(development_idx, len(test_idx), replace=False)
-  # val_data = data.x[val_idx]
-  # val_labels = data.y[val_idx]
-
-
-  # train_idx = [i for i in np.arange(num_nodes) if i not in test_idx and i not in val_idx]
-  # train_data = data.x[train_idx]
-  # train_labels = data.y[train_idx]
-
-
-  # from imblearn.over_sampling import RandomOverSampler
-  # ros = RandomOverSampler(random_state=rnd_state, sampling_strategy='minority')
-  # train_data, train_labels = ros.fit_resample(train_data, train_labels)
-  # train_data   = torch.from_numpy(train_data)
-  # train_labels = torch.from_numpy(train_labels)
-
-
-  # data.x = torch.cat((train_data, val_data, test_data), dim=0)
-  # data.y = torch.cat((train_labels, val_labels, test_labels), dim=0)
-
-
-  # train_idx = np.arange(train_data.shape[0])
-  # val_idx = np.arange(train_data.shape[0], train_data.shape[0] + val_data.shape[0])
-  # test_idx = np.arange(train_data.shape[0] + val_data.shape[0], train_data.shape[0] + val_data.shape[0] + test_data.shape[0])
-  # num_nodes = data.y.shape[0]
-
-
-  
+  # get the train data and oversample it to have equal number of instances from each class
+  train_data = data.x[data.train_mask]
+  train_labels = data.y[data.train_mask]
   rnd_state = np.random.RandomState(seed)
-  num_nodes = data.y.shape[0]
-  development_idx = rnd_state.choice(num_nodes, num_development, replace=False)
-  test_idx = [i for i in np.arange(num_nodes) if i not in development_idx]
 
-  train_idx = []
-  rnd_state = np.random.RandomState(seed)
-  for c in range(data.y.max() + 1):
-    class_idx = development_idx[np.where(data.y[development_idx].cpu() == c)[0]]
-    train_idx.extend(rnd_state.choice(class_idx, num_per_class, replace=False))
+  # oversample the minority class
+  from imblearn.over_sampling import SVMSMOTE
+  ros = SVMSMOTE(random_state=rnd_state, sampling_strategy='minority')
+  train_data, train_labels = ros.fit_resample(train_data, train_labels)
+  train_data = torch.from_numpy(train_data)
+  train_labels = torch.from_numpy(train_labels)
 
-  val_idx = [i for i in development_idx if i not in train_idx]
-  val_idx = np.random.choice(val_idx, min(num_per_class, 200), replace=False)
+  val_data = data.x[data.val_mask]
+  val_labels = data.y[data.val_mask]
 
-  def get_mask(idx):
-    mask = torch.zeros(num_nodes, dtype=torch.bool)
-    mask[idx] = 1
-    return mask
+  test_data = data.x[data.test_mask]
+  test_labels = data.y[data.test_mask]
 
-  data.train_mask = get_mask(train_idx)
-  data.val_mask = get_mask(val_idx)
-  data.test_mask = get_mask(test_idx)
+  # combine the train, val, and test data
+  data.x = torch.cat((train_data, val_data, test_data), dim=0)
+  data.y = torch.cat((train_labels, val_labels, test_labels), dim=0)
+
+  # get the indices of the train, val, and test data
+  train_idx = np.arange(train_data.shape[0])
+  val_idx = np.arange(train_data.shape[0], train_data.shape[0] + val_data.shape[0])
+  test_idx = np.arange(train_data.shape[0] + val_data.shape[0], data.x.shape[0])
+
+  # remap the edges
+  # TODO: this is the last stone to turn
+
+  # set the train, val, and test masks
+  data.train_mask = torch.zeros(data.x.shape[0], dtype=torch.bool)
+  data.train_mask[train_idx] = True
+  data.val_mask = torch.zeros(data.x.shape[0], dtype=torch.bool)
+  data.val_mask[val_idx] = True
+  data.test_mask = torch.zeros(data.x.shape[0], dtype=torch.bool)
+  data.test_mask[test_idx] = True
+
+  print('train data shape: ', train_data.shape)
+  print('val data shape: ', val_data.shape)
+  print('test data shape: ', test_data.shape)
+
 
   return data

@@ -36,8 +36,6 @@ class ODEFuncTransformerAtt(ODEFunc):
     return ax
 
   def forward(self, t, x):  # t is needed when called by the integrator
-    if self.nfe > self.opt["max_nfe"]:
-      raise MaxNFEException
 
     self.nfe += 1
     attention, values = self.multihead_att_layer(x, self.edge_index)

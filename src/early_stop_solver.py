@@ -105,7 +105,7 @@ class EarlyStopDopri5(RKAdaptiveStepsizeODESolver):
       self.rk_state = self._adaptive_step(self.rk_state)
       n_steps += 1
       train_acc, val_acc, test_acc, train_f1, val_f1, test_f1, train_roc_auc, val_roc_auc, test_roc_auc, train_precision, val_precision, test_precision, train_recall, val_recall, test_recall = self.evaluate(self.rk_state)
-      if val_f1 > self.best_val_f1:
+      if val_acc > self.best_val:
         self.set_f1s(train_f1, val_f1, test_f1)
         self.set_accs(train_acc, val_acc, test_acc, self.rk_state.t1)
         self.set_aucs(train_roc_auc, val_roc_auc, test_roc_auc)
@@ -131,10 +131,10 @@ class EarlyStopDopri5(RKAdaptiveStepsizeODESolver):
       from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
       actcpu = self.data.y[mask].cpu()
       predcpu = pred.cpu()
-      f1     = f1_score(actcpu, predcpu)
-      roc    = roc_auc_score(actcpu, predcpu)
-      prec   = precision_score(actcpu, predcpu)
-      recall = recall_score(actcpu, predcpu)
+      f1     = f1_score(actcpu, predcpu, average='macro')
+      roc    = roc_auc_score(actcpu, predcpu, average='macro')
+      prec   = precision_score(actcpu, predcpu, average='macro')
+      recall = recall_score(actcpu, predcpu, average='macro')
 
       accs.append(acc)
       f1s.append(f1)

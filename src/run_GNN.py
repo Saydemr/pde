@@ -67,7 +67,6 @@ def train(model, optimizer, data, pos_encoding=None):
   feat = data.x
   if model.opt['use_labels']:
     train_label_idx, train_pred_idx = get_label_masks(data, model.opt['label_rate'])
-
     feat = add_labels(feat, data.y, train_label_idx, model.num_classes, model.device)
   else:
     train_pred_idx = data.train_mask
@@ -225,7 +224,7 @@ def main(cmd_opt):
   try:
     best_opt = best_params_dict[cmd_opt['dataset']]
     opt = {**cmd_opt, **best_opt}
-    merge_cmd_args(cmd_opt, opt)
+    # merge_cmd_args(cmd_opt, opt)
   except KeyError:
     opt = cmd_opt
 
@@ -259,6 +258,31 @@ def main(cmd_opt):
 
   this_test = test_OGB if opt['dataset'] == 'ogbn-arxiv' else test
 
+
+  # for epoch in range(1, opt['epoch']):
+  #   start_time = time.time()
+
+  #   if opt['rewire_KNN'] and epoch % opt['rewire_KNN_epoch'] == 0 and epoch != 0:
+  #     ei = apply_KNN(data, pos_encoding, model, opt)
+  #     model.odeblock.odefunc.edge_index = ei
+
+  #   loss = train(model, optimizer, data, pos_encoding)
+  #   tmp_train_acc, tmp_val_acc, tmp_test_acc = this_test(model, data, pos_encoding, opt)
+
+  #   best_time = opt['time']
+  #   if tmp_val_acc > val_acc:
+  #     best_epoch = epoch
+  #     train_acc = tmp_train_acc
+  #     val_acc = tmp_val_acc
+  #     test_acc = tmp_test_acc
+  #     best_time = opt['time']
+  #   if not opt['no_early'] and model.odeblock.test_integrator.solver.best_val > val_acc:
+  #     best_epoch = epoch
+  #     val_acc = model.odeblock.test_integrator.solver.best_val
+  #     test_acc = model.odeblock.test_integrator.solver.best_test
+  #     train_acc = model.odeblock.test_integrator.solver.best_train
+  #     best_time = model.odeblock.test_integrator.solver.best_time
+
   for epoch in range(1, opt['epoch']):
     start_time = time.time()
 
@@ -276,7 +300,7 @@ def main(cmd_opt):
     tmp_train_recall, tmp_val_recall, tmp_test_recall = train_scores[4], val_scores[4], test_scores[4]
 
     best_time = opt['time']
-    if tmp_val_f1 > val_f1:
+    if tmp_val_acc > val_acc:
       best_epoch = epoch
       train_acc = tmp_train_acc
       val_acc = tmp_val_acc
@@ -295,7 +319,7 @@ def main(cmd_opt):
       test_recall = tmp_test_recall
       best_time = opt['time']
       
-    if not opt['no_early'] and model.odeblock.test_integrator.solver.best_val_f1 > val_f1:
+    if not opt['no_early'] and model.odeblock.test_integrator.solver.best_val > val_acc:
       best_epoch = epoch
 
       test_acc = model.odeblock.test_integrator.solver.best_test
@@ -398,7 +422,7 @@ if __name__ == '__main__':
   parser.add_argument("--tol_scale_adjoint", type=float, default=1.0,
                       help="multiplier for adjoint_atol and adjoint_rtol")
   parser.add_argument('--ode_blocks', type=int, default=1, help='number of ode blocks to run')
-  parser.add_argument("--max_nfe", type=int, default=1000,
+  parser.add_argument("--max_nfe", type=int, default=100000,
                       help="Maximum number of function evaluations in an epoch. Stiff ODEs will hang if not set.")
   parser.add_argument("--no_early", action="store_true",
                       help="Whether or not to use early stopping of the ODE integrator when testing.")
