@@ -5,6 +5,7 @@ Code partially copied from 'Diffusion Improves Graph Learning' repo https://gith
 import os
 
 import numpy as np
+import copy
 
 import torch
 from eppugnn import Eppugnn
@@ -65,7 +66,7 @@ def get_dataset(opt: dict, data_dir, use_lcc: bool = False) -> InMemoryDataset:
     train_mask_exists = False
 
   # dim reduction & oversampling
-  dataset.data = transform(12345, dataset.data)
+  dataset.data = sample_augment(12345, dataset.data)
 
   return dataset
 
@@ -111,7 +112,7 @@ def remap_edges(edges: list, mapper: dict) -> list:
   return [row, col]
 
 
-def transform(
+def sample_augment(
         seed: int,
         data: Data) -> Data:
   
@@ -123,7 +124,9 @@ def transform(
   # get the train data and oversample it to have equal number of instances from each class
   train_data = data.x[data.train_mask]
   train_labels = data.y[data.train_mask]
+  train_len = len(train_data)
   rnd_state = np.random.RandomState(seed)
+
 
   # oversample the minority class
   from imblearn.over_sampling import SVMSMOTE
@@ -131,6 +134,30 @@ def transform(
   train_data, train_labels = ros.fit_resample(train_data, train_labels)
   train_data = torch.from_numpy(train_data)
   train_labels = torch.from_numpy(train_labels)
+
+  train_orig = train_data[:train_len]
+  train_aug = train_data[train_len:]
+
+  # find nodes with label 1 in train_orig
+  train_orig_1 = train_orig[train_labels[:train_len] == 1]
+
+  counter = 0
+  init_edges = copy.deepcopy(data.edge_index.numpy())
+  for instance in train_aug:
+    # get the most similar node in the original training set
+    dists = torch.cdist(instance.unsqueeze(0), train_orig_1)
+    closest_node = torch.argmin(dists, dim=1)
+    closest_node = closest_node.item()
+    # get the edges of the closest node
+    row, col = init_edges
+    closest_node_edges = np.where(row == closest_node)[0]
+    closest_node_edges = [(row[i], col[i]) for i in closest_node_edges]
+    # add the edges to the augmented node
+    for e in closest_node_edges:
+      data.edge_index = torch.cat((data.edge_index, torch.tensor(e).unsqueeze(1)), dim=1)
+    
+    counter += 1
+
 
   val_data = data.x[data.val_mask]
   val_labels = data.y[data.val_mask]
@@ -147,8 +174,6 @@ def transform(
   val_idx = np.arange(train_data.shape[0], train_data.shape[0] + val_data.shape[0])
   test_idx = np.arange(train_data.shape[0] + val_data.shape[0], data.x.shape[0])
 
-  # remap the edges
-  # TODO: this is the last stone to turn
 
   # set the train, val, and test masks
   data.train_mask = torch.zeros(data.x.shape[0], dtype=torch.bool)
@@ -157,10 +182,5 @@ def transform(
   data.val_mask[val_idx] = True
   data.test_mask = torch.zeros(data.x.shape[0], dtype=torch.bool)
   data.test_mask[test_idx] = True
-
-  print('train data shape: ', train_data.shape)
-  print('val data shape: ', val_data.shape)
-  print('test data shape: ', test_data.shape)
-
 
   return data

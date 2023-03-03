@@ -4,7 +4,7 @@ from functools import partial
 
 import numpy as np
 import torch
-from data import get_dataset, set_train_val_test_split
+from data import get_dataset, sample_augment
 from GNN_early import GNNEarly
 from GNN import GNN
 from ray import tune
@@ -16,8 +16,7 @@ from CGNN import CGNN, get_sym_adj
 from CGNN import train as train_cgnn
 
 """
-python3 ray_tune.py --dataset ogbn-arxiv --lr 0.005 --add_source --function transformer --attention_dim 16 --hidden_dim 128 --heads 4 --input_dropout 0 --decay 0 --adjoint --adjoint_method rk4 --method rk4 --time 5.08 --epoch 500 --num_samples 1 --name ogbn-arxiv-test --gpus 1 --grace_period 50 
-
+python3 ray_tune.py --dataset sc --lr 0.001 --add_source --function transformer --attention_dim 16 --hidden_dim 64 --heads 4 --input_dropout 0 --decay 0 --adjoint --epoch 100 --num_samples 1 --name sc-test --gpus 1 --grace_period 50 --cpus 8 --block transformer --regularise --use_labels --label_rate 1
 """
 
 
@@ -39,14 +38,13 @@ def average_test(models, datas):
 def train_ray_rand(opt, checkpoint_dir=None, data_dir="../data"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dataset = get_dataset(opt, data_dir, opt['not_lcc'])
-
     models = []
     datas = []
     optimizers = []
 
     for split in range(opt["num_splits"]):
-        dataset.data = set_train_val_test_split(
-            np.random.randint(0, 1000), dataset.data, num_development=5000 if opt["dataset"] == "CoauthorCS" else 1500)
+        dataset.data = sample_augment(
+            np.random.randint(0, 1000), dataset.data)
         datas.append(dataset.data)
 
         if opt['baseline']:
@@ -94,6 +92,7 @@ def train_ray_rand(opt, checkpoint_dir=None, data_dir="../data"):
 
 def train_ray(opt, checkpoint_dir=None, data_dir="../data"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     dataset = get_dataset(opt, data_dir, opt['not_lcc'])
 
     models = []
@@ -147,14 +146,15 @@ def train_ray(opt, checkpoint_dir=None, data_dir="../data"):
 
 def train_ray_int(opt, checkpoint_dir=None, data_dir="../data"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Using device", device)
+
     dataset = get_dataset(opt, data_dir, opt['not_lcc'])
 
     if opt["num_splits"] > 0:
-        dataset.data = set_train_val_test_split(
+        dataset.data = sample_augment(
             23 * np.random.randint(0, opt["num_splits"]),
             # random prime 23 to make the splits 'more' random. Could remove
-            dataset.data,
-            num_development=5000 if opt["dataset"] == "CoauthorCS" else 1500)
+            dataset.data)
 
     model = GNN(opt, dataset, device) if opt["no_early"] else GNNEarly(opt, dataset, device)
     if torch.cuda.device_count() > 1:
@@ -327,7 +327,7 @@ if __name__ == "__main__":
     parser.add_argument('--use_labels', dest='use_labels', action='store_true', help='Also diffuse labels')
     parser.add_argument('--label_rate', type=float, default=1,
                         help='% of training labels to use when --use_labels is set.')
-    parser.add_argument("--epoch", type=int, default=10, help="Number of training epochs per iteration.")
+    parser.add_argument("--epoch", type=int, default=100, help="Number of training epochs per iteration.")
     parser.add_argument("--alpha", type=float, default=1.0, help="Factor in front matrix A.")
     parser.add_argument("--time", type=float, default=1.0, help="End time of ODE function.")
     parser.add_argument("--augment", action="store_true",
@@ -383,9 +383,9 @@ if __name__ == "__main__":
     parser.add_argument('--reweight_attention', dest='reweight_attention', action='store_true',
                         help="multiply attention scores by edge weights before softmax")
     # ray args
-    parser.add_argument("--num_samples", type=int, default=20, help="number of ray trials")
-    parser.add_argument("--gpus", type=float, default=1, help="number of gpus per trial. Can be fractional")
-    parser.add_argument("--cpus", type=float, default=8, help="number of cpus per trial. Can be fractional")
+    parser.add_argument("--num_samples", type=int, default=200, help="number of ray trials")
+    parser.add_argument("--gpus", type=float, default=1.0, help="number of gpus per trial. Can be fractional")
+    parser.add_argument("--cpus", type=float, default=1, help="number of cpus per trial. Can be fractional")
     parser.add_argument(
         "--grace_period", type=int, default=5, help="number of epochs to wait before terminating trials"
     )

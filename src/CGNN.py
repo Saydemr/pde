@@ -28,7 +28,7 @@ from functools import partial
 from ray.tune import CLIReporter
 from utils import get_sem, mean_confidence_interval
 from utils import gcn_norm_fill_val
-from data import set_train_val_test_split
+from data import sample_augment
 
 adjoint = False
 if adjoint:
@@ -369,10 +369,9 @@ def train_ray_icml(opt, checkpoint_dir=None, data_dir="../data", opt_val=False):
   dataset = get_dataset(opt, data_dir, False)
 
   if opt["num_splits"] > 0:
-    dataset.data = set_train_val_test_split(
+    dataset.data = sample_augment(
       23 * np.random.randint(0, opt["num_splits"]), 
-      dataset.data, 
-      num_development = 5000 if opt["dataset"] == "CoauthorCS" else 1500)
+      dataset.data)
 
   adj = get_sym_adj(dataset.data, opt, device)
   model, data = CGNN(opt, adj, opt['time'], device).to(device), dataset.data.to(device)
